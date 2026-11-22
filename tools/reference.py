@@ -65,6 +65,8 @@ class Book:
             return out.append(f"R {oid} BAD_ID")
         if qty == 0:
             return out.append(f"R {oid} BAD_QTY")
+        if oid in self.resting:
+            return out.append(f"R {oid} DUP_ID")
         self._match(oid, side, None, qty, out)
         return None
 

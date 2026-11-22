@@ -194,6 +194,9 @@ mb_status mb_limit(mb_book *b, uint64_t id, mb_side side, int64_t price, uint32_
 mb_status mb_market(mb_book *b, uint64_t id, mb_side side, uint32_t qty, uint32_t *filled) {
     if (id == 0) return MB_REJECT_BAD_ID;
     if (qty == 0) return MB_REJECT_BAD_QTY;
+    /* Same rule as limit orders: a resting order's id can't be reused, or the
+     * market order could trade against itself. */
+    if (idmap_get(&b->by_id, id) != NULL) return MB_REJECT_DUP_ID;
     uint32_t f = match(b, id, side, 0, 1, qty);
     if (filled != NULL) {
         *filled = f;

@@ -1,5 +1,7 @@
 # matchbook
 
+[![CI](https://github.com/aaryank077/matchbook/actions/workflows/ci.yml/badge.svg)](https://github.com/aaryank077/matchbook/actions/workflows/ci.yml)
+
 A limit order book matching engine in C: the core of a stock exchange. It
 takes buy and sell orders, matches them by price-time priority, and reports
 trades. It has a checksummed write-ahead journal for crash recovery, a
@@ -58,7 +60,7 @@ Add `-j journal.bin` to make the book survive restarts.
 
 ## Correctness
 
-- **17 C unit tests** cover price-time priority, partial fills, trading at the maker's price, sweeping
+- **18 C unit tests** cover price-time priority, partial fills, trading at the maker's price, sweeping
   multiple levels, every reject, pool exhaustion, and the journal (CRC-32 test vector, bit flips, torn tails).
   They run under UBSan (and ASan on Linux).
 - **Differential fuzzing** (`tools/fuzz.py`): random order flow with a tiny price range and id space,
@@ -69,6 +71,10 @@ Add `-j journal.bin` to make the book survive restarts.
   fully written records had arrived.
 - **The fuzzer catches real bugs**: planting a one-character off-by-one in best-ask tracking made
   39 of 40 runs fail.
+- **A blind spot, fixed**: a market order could reuse a resting order's id and trade against itself.
+  The reference model had the same gap, and the fuzzer only gave market orders fresh ids, so nothing
+  caught it. Market orders now reject `DUP_ID` like limit orders, and the fuzzer reuses ids for them
+  too (the old engine fails 12 of 40 runs).
 
 ## Performance findings
 
@@ -83,7 +89,7 @@ startup moved that cost out of the trading path:
 | After (pre-faulted) | 6.5–8.1M orders/s | ~700 ns |
 
 **Durability costs throughput.** The journal can `fsync` after every order (nothing acknowledged is
-ever lost) or batch N orders per `fsync` (group commit: up to N−1 orders can be lost on power failure).
+ever lost) or batch N orders per `fsync` (group commit: a crash or power failure can lose up to N−1 orders that were already acknowledged).
 Measured end to end through the CLI, including text parsing, on 200k orders:
 
 | Journal | Orders/sec |

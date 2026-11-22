@@ -158,6 +158,17 @@ static void test_market_sweeps_levels_and_discards_rest(void) {
     mb_book_destroy(b);
 }
 
+static void test_market_rejects_resting_id(void) {
+    mb_book *b = fresh_book();
+    CHECK_EQ(mb_limit(b, 1, MB_SELL, 100, 5), MB_OK);
+    uint32_t filled = 99;
+    CHECK_EQ(mb_market(b, 1, MB_BUY, 3, &filled), MB_REJECT_DUP_ID);
+    CHECK_EQ(filled, 99u); /* untouched: nothing traded */
+    CHECK_EQ(ntrades, 0);
+    CHECK_EQ(mb_depth(b, MB_SELL, 100), 5u);
+    mb_book_destroy(b);
+}
+
 static void test_cancel_updates_best_and_frees_id(void) {
     mb_book *b = fresh_book();
     mb_limit(b, 1, MB_BUY, 100, 5);
@@ -309,6 +320,7 @@ int main(void) {
     RUN(test_trades_at_maker_price_and_remainder_rests);
     RUN(test_limit_does_not_trade_through_its_price);
     RUN(test_market_sweeps_levels_and_discards_rest);
+    RUN(test_market_rejects_resting_id);
     RUN(test_cancel_updates_best_and_frees_id);
     RUN(test_filled_orders_cannot_be_cancelled);
     RUN(test_rejects);

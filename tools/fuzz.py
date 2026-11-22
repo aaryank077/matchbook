@@ -41,8 +41,10 @@ def random_flow(rng: random.Random, n: int, max_price: int) -> list[str]:
         elif r < 0.80:
             cmds.append(f"C {rng.randint(0, next_id)}")
         elif r < 0.93:
-            cmds.append(f"M {next_id} {side} {rng.randint(0, 30)}")
+            # Occasionally reuse an id, which may belong to a resting order.
+            oid = next_id if rng.random() < 0.9 else rng.randint(0, next_id)
             next_id += 1
+            cmds.append(f"M {oid} {side} {rng.randint(0, 30)}")
         else:
             cmds.append("P")
     return cmds
