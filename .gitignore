@@ -1,0 +1,6 @@
+build/
+.venv/
+__pycache__/
+*.dSYM/
+fuzz-failure-*.txt
+.DS_Store

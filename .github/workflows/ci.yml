@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build (-Wall -Wextra -Werror)
+        run: make all
+      - name: Unit tests (sanitizers)
+        run: make test
+      - name: Differential fuzzing vs. Python reference model
+        run: make fuzz
+      - name: Benchmark smoke run
+        run: ./build/bench -n 500000
