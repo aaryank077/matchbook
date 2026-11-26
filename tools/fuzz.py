@@ -38,8 +38,11 @@ def random_flow(rng: random.Random, n: int, max_price: int) -> list[str]:
             oid = next_id if rng.random() < 0.9 else rng.randint(0, next_id)
             next_id += 1
             cmds.append(f"L {oid} {side} {price} {qty}")
-        elif r < 0.80:
+        elif r < 0.70:
             cmds.append(f"C {rng.randint(0, next_id)}")
+        elif r < 0.82:
+            # Qty up to 25 against resting sizes of 1-20, so some reduces exceed what remains.
+            cmds.append(f"X {rng.randint(0, next_id)} {rng.randint(0, 25)}")
         elif r < 0.93:
             # Occasionally reuse an id, which may belong to a resting order.
             oid = next_id if rng.random() < 0.9 else rng.randint(0, next_id)

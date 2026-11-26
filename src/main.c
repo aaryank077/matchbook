@@ -7,6 +7,7 @@
  *   L <id> <B|S> <price> <qty>   limit order
  *   M <id> <B|S> <qty>           market order
  *   C <id>                       cancel
+ *   X <id> <qty>                 reduce a resting order by qty, keeping its priority
  *   P                            print top of book
  *   # ...                        comment
  *
@@ -47,6 +48,7 @@ static mb_status apply(mb_book *book, const jr_record *r) {
     switch (r->kind) {
         case JR_LIMIT: return mb_limit(book, r->id, (mb_side) r->side, r->price, r->qty);
         case JR_MARKET: return mb_market(book, r->id, (mb_side) r->side, r->qty, NULL);
+        case JR_REDUCE: return mb_reduce(book, r->id, r->qty);
         default: return mb_cancel(book, r->id);
     }
 }
@@ -138,6 +140,12 @@ int main(int argc, char **argv) {
                     goto malformed;
                 }
                 rec = (jr_record) {JR_CANCEL, 0, id, 0, 0};
+                break;
+            case 'X':
+                if (sscanf(line, "X %" SCNu64 " %" SCNu32, &id, &qty) != 2) {
+                    goto malformed;
+                }
+                rec = (jr_record) {JR_REDUCE, 0, id, 0, qty};
                 break;
             case 'P': {
                 int64_t bid = mb_best_bid(book), ask = mb_best_ask(book);

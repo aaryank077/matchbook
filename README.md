@@ -55,12 +55,13 @@ T 1 3 101 3        # then 3 more from maker 1 @ 101
 BOOK 0 0 0 0       # order 1 (2 left) cancelled; book is empty
 ```
 
-Input: `L <id> <B|S> <price> <qty>`, `M <id> <B|S> <qty>`, `C <id>`, `P` (print top of book).
+Input: `L <id> <B|S> <price> <qty>`, `M <id> <B|S> <qty>`, `C <id>`, `X <id> <qty>` (reduce a resting order,
+keeping its place in line, like an exchange feed's execution or partial cancel), `P` (print top of book).
 Add `-j journal.bin` to make the book survive restarts.
 
 ## Correctness
 
-- **18 C unit tests** cover price-time priority, partial fills, trading at the maker's price, sweeping
+- **21 C unit tests** cover price-time priority, partial fills, reducing an order without losing priority, trading at the maker's price, sweeping
   multiple levels, every reject, pool exhaustion, and the journal (CRC-32 test vector, bit flips, torn tails).
   They run under UBSan (and ASan on Linux).
 - **Differential fuzzing** (`tools/fuzz.py`): random order flow with a tiny price range and id space,

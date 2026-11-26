@@ -64,7 +64,7 @@ int jr_decode(const unsigned char in[JR_RECORD_SIZE], jr_record *rec) {
     if (get_u32(in + 28) != crc32(in, 28)) {
         return -1;
     }
-    if (in[0] < JR_LIMIT || in[0] > JR_CANCEL) {
+    if (in[0] < JR_LIMIT || in[0] > JR_REDUCE) {
         return -1;
     }
     rec->kind = in[0];

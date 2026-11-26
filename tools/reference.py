@@ -86,6 +86,23 @@ class Book:
             del book[price]
         return None
 
+    def reduce(self, oid: int, qty: int, out: list[str]) -> None:
+        if oid == 0:
+            return out.append(f"R {oid} BAD_ID")
+        if qty == 0:
+            return out.append(f"R {oid} BAD_QTY")
+        if oid not in self.resting:
+            return out.append(f"R {oid} UNKNOWN_ID")
+        side, price = self.resting[oid]
+        queue = (self.bids if side == "B" else self.asks)[price]
+        entry = next(e for e in queue if e[0] == oid)
+        if qty > entry[1]:
+            return out.append(f"R {oid} BAD_QTY")
+        if qty == entry[1]:
+            return self.cancel(oid, out)
+        entry[1] -= qty  # stays where it is in the queue
+        return None
+
     def top(self, out: list[str]) -> None:
         bid = max(self.bids) if self.bids else 0
         ask = min(self.asks) if self.asks else 0
@@ -108,6 +125,8 @@ def run(commands: list[str], max_price: int, max_orders: int) -> list[list[str]]
             book.market(int(parts[1]), parts[2], int(parts[3]), out)
         elif kind == "C":
             book.cancel(int(parts[1]), out)
+        elif kind == "X":
+            book.reduce(int(parts[1]), int(parts[2]), out)
         elif kind == "P":
             book.top(out)
         per_command.append(out)

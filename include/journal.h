@@ -22,7 +22,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef enum { JR_LIMIT = 1, JR_MARKET = 2, JR_CANCEL = 3 } jr_kind;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum { JR_LIMIT = 1, JR_MARKET = 2, JR_CANCEL = 3, JR_REDUCE = 4 } jr_kind;
 
 typedef struct jr_record {
     uint8_t kind; /* jr_kind */
@@ -60,5 +64,9 @@ uint32_t crc32(const void *data, size_t len);
 void jr_encode(const jr_record *rec, unsigned char out[JR_RECORD_SIZE]);
 /* Returns 0 if the checksum matches, -1 otherwise. */
 int jr_decode(const unsigned char in[JR_RECORD_SIZE], jr_record *rec);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

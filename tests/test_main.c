@@ -226,6 +226,46 @@ static void test_price_range_edges(void) {
     mb_book_destroy(b);
 }
 
+static void test_reduce_keeps_time_priority(void) {
+    mb_book *b = fresh_book();
+    mb_limit(b, 1, MB_SELL, 100, 10); /* oldest */
+    mb_limit(b, 2, MB_SELL, 100, 5);
+    CHECK_EQ(mb_reduce(b, 1, 7), MB_OK);
+    CHECK_EQ(mb_depth(b, MB_SELL, 100), 8u);
+    CHECK_EQ(mb_order_count(b), 2u);
+    CHECK_EQ(ntrades, 0);
+    /* Order 1 still fills first, with only its 3 remaining shares. */
+    mb_limit(b, 10, MB_BUY, 100, 4);
+    CHECK_EQ(ntrades, 2);
+    CHECK_EQ(trades[0].maker_id, 1u); CHECK_EQ(trades[0].qty, 3u);
+    CHECK_EQ(trades[1].maker_id, 2u); CHECK_EQ(trades[1].qty, 1u);
+    mb_book_destroy(b);
+}
+
+static void test_reduce_to_zero_removes_and_updates_best(void) {
+    mb_book *b = fresh_book();
+    mb_limit(b, 1, MB_BUY, 100, 5);
+    mb_limit(b, 2, MB_BUY, 98, 5);
+    CHECK_EQ(mb_reduce(b, 1, 5), MB_OK);
+    CHECK_EQ(mb_best_bid(b), 98);
+    CHECK_EQ(mb_order_count(b), 1u);
+    CHECK_EQ(mb_reduce(b, 1, 1), MB_REJECT_UNKNOWN_ID);
+    CHECK_EQ(mb_limit(b, 1, MB_SELL, 200, 1), MB_OK); /* id reusable once gone */
+    mb_book_destroy(b);
+}
+
+static void test_reduce_rejects(void) {
+    mb_book *b = fresh_book();
+    mb_limit(b, 1, MB_SELL, 100, 5);
+    CHECK_EQ(mb_reduce(b, 0, 1), MB_REJECT_BAD_ID);
+    CHECK_EQ(mb_reduce(b, 1, 0), MB_REJECT_BAD_QTY);
+    CHECK_EQ(mb_reduce(b, 9, 1), MB_REJECT_UNKNOWN_ID);
+    CHECK_EQ(mb_reduce(b, 1, 6), MB_REJECT_BAD_QTY); /* more than remains */
+    CHECK_EQ(mb_depth(b, MB_SELL, 100), 5u);         /* and nothing changed */
+    CHECK_EQ(mb_best_ask(b), 100);
+    mb_book_destroy(b);
+}
+
 /* ---- journal ---------------------------------------------------------- */
 
 static void test_crc32_known_vector(void) {
@@ -240,6 +280,11 @@ static void test_record_roundtrip_and_corruption(void) {
     CHECK(out.kind == in.kind && out.side == in.side && out.id == in.id && out.price == in.price && out.qty == in.qty);
     buf[10] ^= 0x01; /* flip one bit */
     CHECK_EQ(jr_decode(buf, &out), -1);
+
+    jr_record reduce = {JR_REDUCE, 0, 42, 0, 9};
+    jr_encode(&reduce, buf);
+    CHECK_EQ(jr_decode(buf, &out), 0);
+    CHECK(out.kind == JR_REDUCE && out.id == 42 && out.qty == 9);
 }
 
 static size_t replay_count;
@@ -326,6 +371,9 @@ int main(void) {
     RUN(test_rejects);
     RUN(test_pool_full_rejects_only_the_remainder);
     RUN(test_price_range_edges);
+    RUN(test_reduce_keeps_time_priority);
+    RUN(test_reduce_to_zero_removes_and_updates_best);
+    RUN(test_reduce_rejects);
     RUN(test_crc32_known_vector);
     RUN(test_record_roundtrip_and_corruption);
     RUN(test_recovery_truncates_torn_tail);

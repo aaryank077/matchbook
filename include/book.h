@@ -14,6 +14,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum { MB_BUY = 0, MB_SELL = 1 } mb_side;
 
 typedef enum {
@@ -50,6 +54,15 @@ mb_status mb_market(mb_book *book, uint64_t id, mb_side side, uint32_t qty, uint
 
 mb_status mb_cancel(mb_book *book, uint64_t id);
 
+/*
+ * Removes `qty` from a resting order without changing its place in the FIFO,
+ * the way an execution or partial cancel on an exchange feed does. Reducing
+ * by the full remaining quantity removes the order. Reducing by more than
+ * remains is rejected (BAD_QTY) and leaves the order untouched, so a replayer
+ * notices when its book disagrees with the feed.
+ */
+mb_status mb_reduce(mb_book *book, uint64_t id, uint32_t qty);
+
 /* Best prices, or 0 if that side is empty. */
 int64_t mb_best_bid(const mb_book *book);
 int64_t mb_best_ask(const mb_book *book);
@@ -60,5 +73,9 @@ uint64_t mb_depth(const mb_book *book, mb_side side, int64_t price);
 size_t mb_order_count(const mb_book *book);
 
 const char *mb_status_str(mb_status status);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

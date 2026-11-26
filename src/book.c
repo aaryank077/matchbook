@@ -220,6 +220,25 @@ mb_status mb_cancel(mb_book *b, uint64_t id) {
     return MB_OK;
 }
 
+mb_status mb_reduce(mb_book *b, uint64_t id, uint32_t qty) {
+    if (id == 0) return MB_REJECT_BAD_ID;
+    if (qty == 0) return MB_REJECT_BAD_QTY;
+    order *o = idmap_get(&b->by_id, id);
+    if (o == NULL) {
+        return MB_REJECT_UNKNOWN_ID;
+    }
+    if (qty > o->qty) {
+        return MB_REJECT_BAD_QTY;
+    }
+    if (qty == o->qty) {
+        return mb_cancel(b, id);
+    }
+    /* Shrinking in place keeps time priority; only a size increase would lose it. */
+    o->qty -= qty;
+    b->levels[o->side][o->price].total_qty -= qty;
+    return MB_OK;
+}
+
 int64_t mb_best_bid(const mb_book *b) { return b->best[MB_BUY]; }
 int64_t mb_best_ask(const mb_book *b) { return b->best[MB_SELL]; }
 
