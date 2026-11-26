@@ -26,6 +26,8 @@ jobs:
         run: make test
       - name: ITCH decoder tests (sanitizers)
         run: make itch-test
+      - name: Rebuild real NASDAQ books vs. Python reference (sanitizers)
+        run: make itch-replay-test
       - name: Differential fuzzing vs. Python reference model
         run: make fuzz
       - name: Benchmark smoke run

@@ -19,13 +19,16 @@ CXX      ?= c++
 CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror
 CXXSAN    = -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=$(SANITIZERS) -fno-sanitize-recover=all -fno-omit-frame-pointer
 CXXINC    = -Icpp -Iinclude
-CPP_HDRS  = $(wildcard cpp/itch/*.hpp)
+CPP_HDRS  = $(wildcard cpp/*/*.hpp)
+LIB_OBJ   = $(LIB_SRC:src/%.c=build/obj/%.o)
+LIB_OBJ_SAN = $(LIB_SRC:src/%.c=build/obj-san/%.o)
+FIXTURE   = tests/data/12302019-TWTR-GILD-to-0951.itch.gz
 GTEST_PREFIX ?= $(shell brew --prefix googletest 2>/dev/null)
 GTEST     = $(if $(GTEST_PREFIX),-I$(GTEST_PREFIX)/include -L$(GTEST_PREFIX)/lib) -lgtest_main -lgtest -pthread
 
-.PHONY: all test fuzz bench analyze itch-test clean
+.PHONY: all test fuzz bench analyze itch-test itch-replay-test clean
 
-all: build/matchbook build/bench build/itch_stats
+all: build/matchbook build/bench build/itch_stats build/itch_replay
 
 build:
 	mkdir -p build
@@ -56,6 +59,28 @@ bench: build/bench
 analyze: build/bench
 	./build/bench -n 1000000 --csv build/latency.csv
 	python3 analysis/latency.py build/latency.csv --plot build/latency.png
+
+build/obj/%.o: src/%.c $(HDRS) | build
+	mkdir -p build/obj
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+build/obj-san/%.o: src/%.c $(HDRS) | build
+	mkdir -p build/obj-san
+	$(CC) $(CPPFLAGS) $(SAN) -c -o $@ $<
+
+build/itch_replay: cpp/tools/itch_replay.cpp $(CPP_HDRS) $(LIB_OBJ) | build
+	$(CXX) $(CXXINC) $(CXXFLAGS) -o $@ cpp/tools/itch_replay.cpp $(LIB_OBJ)
+
+build/itch_replay-san: cpp/tools/itch_replay.cpp $(CPP_HDRS) $(LIB_OBJ_SAN) | build
+	$(CXX) $(CXXINC) $(CXXSAN) -o $@ cpp/tools/itch_replay.cpp $(LIB_OBJ_SAN)
+
+# Rebuild two real books (TWTR, GILD, 2019-12-30 03:04-09:51) under sanitizers,
+# require zero invariant violations, and diff every top-of-book change against
+# the independent Python model.
+itch-replay-test: build/itch_replay-san
+	gzip -dc $(FIXTURE) > build/fixture.itch
+	./build/itch_replay-san --symbols TWTR,GILD --max-orders 65536 --tob build/fixture-tob.csv build/fixture.itch
+	python3 tools/itch_book_reference.py --symbols TWTR,GILD build/fixture.itch --compare build/fixture-tob.csv
 
 build/itch_stats: cpp/tools/itch_stats.cpp $(CPP_HDRS) | build
 	$(CXX) $(CXXINC) $(CXXFLAGS) -o $@ cpp/tools/itch_stats.cpp

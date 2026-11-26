@@ -63,6 +63,13 @@ mb_status mb_cancel(mb_book *book, uint64_t id);
  */
 mb_status mb_reduce(mb_book *book, uint64_t id, uint32_t qty);
 
+/*
+ * Looks up a resting order. Returns 1 and fills any non-NULL outputs if it is
+ * resting, 0 otherwise. Feed replay needs this: an ITCH replace message names
+ * the order but not its side.
+ */
+int mb_lookup(const mb_book *book, uint64_t id, mb_side *side, int64_t *price, uint32_t *qty);
+
 /* Best prices, or 0 if that side is empty. */
 int64_t mb_best_bid(const mb_book *book);
 int64_t mb_best_ask(const mb_book *book);

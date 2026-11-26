@@ -266,6 +266,24 @@ static void test_reduce_rejects(void) {
     mb_book_destroy(b);
 }
 
+static void test_lookup(void) {
+    mb_book *b = fresh_book();
+    mb_side side = MB_BUY;
+    int64_t price = 0;
+    uint32_t qty = 0;
+    mb_limit(b, 1, MB_SELL, 105, 10);
+    CHECK_EQ(mb_lookup(b, 1, &side, &price, &qty), 1);
+    CHECK(side == MB_SELL && price == 105 && qty == 10);
+    mb_reduce(b, 1, 4);
+    CHECK_EQ(mb_lookup(b, 1, NULL, NULL, &qty), 1);
+    CHECK_EQ(qty, 6u);
+    CHECK_EQ(mb_lookup(b, 2, NULL, NULL, NULL), 0);
+    CHECK_EQ(mb_lookup(b, 0, NULL, NULL, NULL), 0);
+    mb_cancel(b, 1);
+    CHECK_EQ(mb_lookup(b, 1, NULL, NULL, NULL), 0);
+    mb_book_destroy(b);
+}
+
 /* ---- journal ---------------------------------------------------------- */
 
 static void test_crc32_known_vector(void) {
@@ -374,6 +392,7 @@ int main(void) {
     RUN(test_reduce_keeps_time_priority);
     RUN(test_reduce_to_zero_removes_and_updates_best);
     RUN(test_reduce_rejects);
+    RUN(test_lookup);
     RUN(test_crc32_known_vector);
     RUN(test_record_roundtrip_and_corruption);
     RUN(test_recovery_truncates_torn_tail);

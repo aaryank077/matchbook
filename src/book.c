@@ -239,6 +239,17 @@ mb_status mb_reduce(mb_book *b, uint64_t id, uint32_t qty) {
     return MB_OK;
 }
 
+int mb_lookup(const mb_book *b, uint64_t id, mb_side *side, int64_t *price, uint32_t *qty) {
+    const order *o = id == 0 ? NULL : idmap_get(&b->by_id, id);
+    if (o == NULL) {
+        return 0;
+    }
+    if (side != NULL) *side = o->side;
+    if (price != NULL) *price = o->price;
+    if (qty != NULL) *qty = o->qty;
+    return 1;
+}
+
 int64_t mb_best_bid(const mb_book *b) { return b->best[MB_BUY]; }
 int64_t mb_best_ask(const mb_book *b) { return b->best[MB_SELL]; }
 

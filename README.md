@@ -45,6 +45,7 @@ make fuzz       # 300 differential + crash-recovery runs against tools/reference
 make bench      # throughput and latency percentiles
 make analyze    # pandas latency report + chart (pip install -r analysis/requirements.txt)
 make itch-test  # C++ ITCH 5.0 decoder tests (brew install googletest / apt install libgtest-dev)
+make itch-replay-test  # rebuild two real NASDAQ books and diff against the Python model
 ```
 
 The CLI reads one order per line and writes trades and rejects:
@@ -62,7 +63,7 @@ Add `-j journal.bin` to make the book survive restarts.
 
 ## Correctness
 
-- **21 C unit tests** cover price-time priority, partial fills, reducing an order without losing priority, trading at the maker's price, sweeping
+- **22 C unit tests** cover price-time priority, partial fills, reducing an order without losing priority, order lookup, trading at the maker's price, sweeping
   multiple levels, every reject, pool exhaustion, and the journal (CRC-32 test vector, bit flips, torn tails).
   They run under UBSan (and ASan on Linux).
 - **Differential fuzzing** (`tools/fuzz.py`): random order flow with a tiny price range and id space,
@@ -105,7 +106,7 @@ Measured end to end through the CLI, including text parsing, on 200k orders:
 450–640 ns across every 50k-order window. The rare 100 µs+ outliers hit all order types alike, which
 points to interrupts and scheduling, not the matching code.
 
-## Real market data: NASDAQ ITCH 5.0 (in progress)
+## Real market data: NASDAQ ITCH 5.0
 
 The next step is replaying a full NASDAQ trading day through the engine. ITCH is NASDAQ's
 binary feed of every order added, executed, cancelled, deleted and replaced on its book. Because
@@ -139,9 +140,50 @@ stored as integer cents. The 0.57% under $1 can be sub-penny, and the highest pr
 which looks like a placeholder quote at the price ceiling, not a real price. With directly indexed price levels,
 each book's price range has to be sized per symbol, not for that maximum.
 
-Next: a single-threaded rebuild of the busiest symbols (QQQ, SPY, IWM, AAPL, ...) with invariants
-checked on every message, then a lock-free single-producer/single-consumer ring buffer between a
-parsing thread and a book thread.
+### Rebuilding the books
+
+`build/itch_replay` (`cpp/replay/replayer.hpp`) applies each book message to one engine book per
+symbol: an add calls `mb_limit`, an execution or partial cancel calls `mb_reduce`, a delete calls
+`mb_cancel`, and a replace cancels the old order and adds the new one on the same side (found with
+`mb_lookup`, since ITCH replace messages don't carry the side). The engine must never match. On every
+message the replayer checks that:
+
+- every execution, cancel and delete refers to an order that is resting and has enough shares
+- every plain execution (`E`) hits an order at the best price on its side
+- no add reuses a resting order's reference number
+- the engine never reports a trade
+
+Orders the cents-indexed book can't hold go in a side table, counted by reason, and later messages
+about them are still checked: sub-penny prices under $1, prices above a cap (`--max-price`, default
+$2,000; this catches the $199,999.99 placeholders), and adds that would lock or cross the book.
+
+**Full day, 20 busiest symbols** (QQQ, SPY, IWM, TQQQ, AAPL, AMD, MSFT, ...): 23.5M book events
+in 34 s straight from the `.gz`, with **zero violations**. Also:
+
+- No add ever would have locked or crossed the book, so the would-cross rule never fired.
+- Every one of the 20 books is empty at the close: every order added that day was eventually
+  executed, cancelled or deleted, and the count never went negative.
+- The off-grid and above-cap orders (0 to 27 per symbol; GOOGL had the most) never traded once.
+- Peak resting orders per book ranged from 133 (URTY) to 27,110 (AAPL).
+
+**Differential check.** `tools/itch_book_reference.py` rebuilds the same books independently: it
+decodes with Python's `struct` and keeps each book as dicts and heaps, sharing no code with the
+decoder or the engine. It writes the top of book (best bid and ask with their sizes) every time it
+changes. For QQQ, SPY, AAPL, AMD and MSFT from 03:04 through the 09:30 opening cross to 09:51, the
+two replayers agree on all **648,050** top-of-book changes. Making a partial cancel delete the
+whole order is caught both ways: about 5–6k unknown-order violations per symbol, and the diff
+diverges at line 105.
+
+CI runs the same checks under sanitizers on a 558 KB fixture
+(`tests/data/12302019-TWTR-GILD-to-0951.itch.gz`, cut with `tools/cut_itch_fixture.py`): TWTR and
+GILD from 03:04 to 09:51, 57,638 messages, with all 23,218 top-of-book changes matching.
+
+Not covered: the Python diff ran on the first 1 GB of the day rather than the whole 8.25 GB
+(the full day is checked only by the invariants above), and hidden orders, which never appear in
+ITCH, aren't modeled.
+
+Next: a lock-free single-producer/single-consumer ring buffer between a parsing thread and a book
+thread, and latency measured per message.
 
 ## OS concepts used
 
