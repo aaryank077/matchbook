@@ -44,6 +44,7 @@ make test       # C unit tests under sanitizers
 make fuzz       # 300 differential + crash-recovery runs against tools/reference.py
 make bench      # throughput and latency percentiles
 make analyze    # pandas latency report + chart (pip install -r analysis/requirements.txt)
+make itch-test  # C++ ITCH 5.0 decoder tests (brew install googletest / apt install libgtest-dev)
 ```
 
 The CLI reads one order per line and writes trades and rejects:
@@ -103,6 +104,44 @@ Measured end to end through the CLI, including text parsing, on 200k orders:
 **Tail latency is mostly the OS.** With `make analyze`, the pandas report shows the p99 holds at
 450–640 ns across every 50k-order window. The rare 100 µs+ outliers hit all order types alike, which
 points to interrupts and scheduling, not the matching code.
+
+## Real market data: NASDAQ ITCH 5.0 (in progress)
+
+The next step is replaying a full NASDAQ trading day through the engine. ITCH is NASDAQ's
+binary feed of every order added, executed, cancelled, deleted and replaced on its book. Because
+those orders were already matched by NASDAQ, replay means **rebuilding** each stock's book from the
+feed (an add rests, an execution or partial cancel calls `mb_reduce`, a delete calls `mb_cancel`)
+rather than matching them again.
+
+Done so far, in C++20 under `cpp/`:
+
+- **Decoder** (`cpp/itch/itch.hpp`): reads messages in place with no copying, checks every
+  message's length against the spec for its type, and turns the six book-changing types into one
+  40-byte `Event`. It can mmap a decompressed file or stream from a pipe
+  (`gzip -dc day.gz | build/itch_stats -`), carrying messages split across reads.
+- **Tests** (`cpp/tests/itch_test.cpp`, GoogleTest, under sanitizers): one fixture per message
+  type built field by field from the spec layout. Streaming tests split messages at every offset,
+  in reads as small as 1 byte.
+
+The NASDAQ sample for 2019-12-30 (`12302019.NASDAQ_ITCH50.gz` from NASDAQ's public sample
+files, 3.5 GB) decodes end to end with no errors (`build/itch_stats`):
+
+| | |
+|---|---|
+| Messages | 268.7M (8.25 GB) across 8,906 symbols |
+| Mix | add 44.1% (including MPID-attributed adds), delete 42.6%, replace 8.1%, execute 2.2%, cancel 1.0%, other 2.0% |
+| Decode speed | ~27M msgs/s, ~860 MB/s (mmap, 1 GB slice, warm page cache, including the stats bookkeeping) |
+| Cross-check | An independent Python walk of the same 1 GB slice finds the same 31,603,673 messages |
+
+The data checks the book rebuild depends on all pass: no timestamp ever goes backwards, every add
+is a buy or sell, and every add or replace price of $1 or more is a whole cent. So prices can be
+stored as integer cents. The 0.57% under $1 can be sub-penny, and the highest price is $199,999.99,
+which looks like a placeholder quote at the price ceiling, not a real price. With directly indexed price levels,
+each book's price range has to be sized per symbol, not for that maximum.
+
+Next: a single-threaded rebuild of the busiest symbols (QQQ, SPY, IWM, AAPL, ...) with invariants
+checked on every message, then a lock-free single-producer/single-consumer ring buffer between a
+parsing thread and a book thread.
 
 ## OS concepts used
 

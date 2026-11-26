@@ -4,3 +4,4 @@ __pycache__/
 *.dSYM/
 fuzz-failure-*.txt
 .DS_Store
+data/
